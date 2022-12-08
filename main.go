@@ -147,16 +147,17 @@ func (q *queueResolver) Pop(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (q *queueResolver) RouteMethod() http.Handler {
+type Methods map[string]http.HandlerFunc
+
+func RouteMethods(methods Methods) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPut:
-			q.Push(w, r)
-		case http.MethodGet:
-			q.Pop(w, r)
-		default:
-			w.WriteHeader(http.StatusNotFound)
+		resolver, ok := methods[r.Method]
+		if !ok {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+
+		resolver(w, r)
 	})
 }
 
@@ -167,7 +168,10 @@ func main() {
 	server := http.NewServeMux()
 	queue := NewQueueResolver()
 
-	server.Handle("/", queue.RouteMethod())
+	server.Handle("/", RouteMethods(Methods{
+		http.MethodGet: queue.Pop,
+		http.MethodPut: queue.Push,
+	}))
 
 	log.Fatal(http.ListenAndServe(":"+*port, server))
 }
